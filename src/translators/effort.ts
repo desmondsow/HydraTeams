@@ -44,6 +44,27 @@ export function parseClaudeRequestEffort(
   return CLAUDE_REQUEST_EFFORTS.find((effort) => effort === normalized);
 }
 
+export function isClaudeOpus46Model(model: string): boolean {
+  const normalized = model.toLowerCase();
+  return normalized === "claude-opus-4-6" || normalized.startsWith("claude-opus-4-6-");
+}
+
+export function validateClaudeRequestEffortForModel(
+  model: string,
+  effort: string | undefined
+): string | undefined {
+  const parsedEffort = parseClaudeRequestEffort(effort);
+  if (!parsedEffort || parsedEffort !== "max") {
+    return undefined;
+  }
+
+  if (isClaudeOpus46Model(model)) {
+    return undefined;
+  }
+
+  return "output_config.effort=max is only supported for claude-opus-4-6 requests";
+}
+
 export function mapClaudeEffortToGpt(
   effort: ClaudeEffort
 ): GptReasoningEffort {

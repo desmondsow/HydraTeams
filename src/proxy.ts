@@ -4,7 +4,7 @@ import { translateRequest } from "./translators/request.js";
 import { translateStream } from "./translators/response.js";
 import { translateRequestToResponses } from "./translators/request-responses.js";
 import { translateResponsesStream } from "./translators/response-responses.js";
-import { resolveReasoningEffort } from "./translators/effort.js";
+import { resolveReasoningEffort, validateClaudeRequestEffortForModel } from "./translators/effort.js";
 import { ProxyLogger } from "./logger.js";
 
 const DEFAULT_OPENAI_URL = "https://api.openai.com/v1/chat/completions";
@@ -187,6 +187,12 @@ export function createProxyServer(config: ProxyConfig): http.Server {
       const isStreaming = anthropicReq.stream !== false;
       const msgCount = anthropicReq.messages?.length || 0;
       const toolCount = anthropicReq.tools?.length || 0;
+      const effortCompatibilityError = !config.reasoningEffortOverride
+        ? validateClaudeRequestEffortForModel(
+          anthropicReq.model,
+          anthropicReq.output_config?.effort
+        )
+        : undefined;
       const resolvedReasoningEffort = resolveReasoningEffort({
         cliOverride: config.reasoningEffortOverride,
         requestEffort: anthropicReq.output_config?.effort,
@@ -197,6 +203,19 @@ export function createProxyServer(config: ProxyConfig): http.Server {
 
       // Identify agent session
       const session = logger.identify({ toolCount, msgCount, isTeammate, systemText });
+
+      if (effortCompatibilityError) {
+        logger.logError(session, effortCompatibilityError);
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({
+          type: "error",
+          error: {
+            type: "invalid_request_error",
+            message: effortCompatibilityError,
+          },
+        }));
+        return;
+      }
 
       // Log the request
       logger.logRequest(session, {

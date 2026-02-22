@@ -147,6 +147,10 @@ Request mapping:
 - `output_config.effort=high` → GPT `high`
 - `output_config.effort=max` → GPT `xhigh`
 
+Compatibility rule:
+- `output_config.effort=max` is accepted only when the incoming Claude model is `claude-opus-4-6`
+- otherwise HydraTeams returns `400 invalid_request_error`
+
 Provider behavior:
 - `--provider chatgpt`: sends `reasoning.effort`
 - `--provider openai`: sends `reasoning_effort` for reasoning-capable models (`gpt-5*`, `o*`)

@@ -733,6 +733,10 @@ Mapping:
 - `high -> high`
 - `max -> xhigh`
 
+Constraint:
+- `max` is only valid for incoming `claude-opus-4-6` requests
+- for other incoming Claude models, the proxy returns `400 invalid_request_error`
+
 If upstream rejects `reasoning`/`reasoning_effort` with a 400 validation error, HydraTeams retries once without the effort field.
 
 ### Model Name Spoofing
