@@ -16,6 +16,7 @@ HydraTeams is a translation proxy. It sits between a Claude Code teammate proces
 
 - **Inbound:** Anthropic Messages API requests → OpenAI Chat Completions requests
 - **Outbound:** OpenAI SSE stream → Anthropic SSE stream
+- **Controls:** Claude request-level effort controls (`output_config.effort`) → provider reasoning effort fields
 
 The teammate remains a **full Claude Code instance**. Every tool works — Read, Write, Edit, Bash, Glob, Grep, Git, WebSearch, Task management, SendMessage. The proxy only swaps the brain. The body stays identical.
 

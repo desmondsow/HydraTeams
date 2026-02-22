@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { ProxyConfig } from "./translators/types.js";
+import { parseGptReasoningEffort } from "./translators/effort.js";
 
 interface CodexAuth {
   accessToken: string;
@@ -39,6 +40,8 @@ export function loadConfig(args: string[]): ProxyConfig {
   const targetProvider = (getArg("--provider") || process.env.HYDRA_TARGET_PROVIDER || "openai") as ProxyConfig["targetProvider"];
   const spoofModel = getArg("--spoof") || process.env.HYDRA_SPOOF_MODEL || "claude-sonnet-4-5-20250929";
   const targetUrl = getArg("--target-url") || process.env.HYDRA_TARGET_URL;
+  const reasoningEffortArg = getArg("--reasoning-effort");
+  const reasoningEffortOverride = parseGptReasoningEffort(reasoningEffortArg);
 
   // Passthrough config
   const passthroughArg = getArg("--passthrough");
@@ -85,9 +88,27 @@ export function loadConfig(args: string[]): ProxyConfig {
     process.exit(1);
   }
 
+  if (reasoningEffortArg && !reasoningEffortOverride) {
+    console.error(`Error: Invalid --reasoning-effort value "${reasoningEffortArg}"`);
+    console.error("  Allowed values: minimal, low, medium, high, xhigh");
+    process.exit(1);
+  }
+
   if (passthroughModels.length > 0) {
     console.log("Passthrough enabled — Claude Code auth headers will be relayed to Anthropic API.");
   }
 
-  return { port, targetModel, targetProvider, targetUrl, openaiApiKey, spoofModel, passthroughModels, anthropicApiKey, chatgptAccessToken, chatgptAccountId };
+  return {
+    port,
+    targetModel,
+    targetProvider,
+    targetUrl,
+    openaiApiKey,
+    spoofModel,
+    passthroughModels,
+    anthropicApiKey,
+    chatgptAccessToken,
+    chatgptAccountId,
+    reasoningEffortOverride,
+  };
 }

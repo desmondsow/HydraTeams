@@ -1,9 +1,10 @@
 import http from "node:http";
-import type { ProxyConfig } from "./translators/types.js";
+import type { AnthropicRequest, ProxyConfig } from "./translators/types.js";
 import { translateRequest } from "./translators/request.js";
 import { translateStream } from "./translators/response.js";
 import { translateRequestToResponses } from "./translators/request-responses.js";
 import { translateResponsesStream } from "./translators/response-responses.js";
+import { resolveReasoningEffort } from "./translators/effort.js";
 import { ProxyLogger } from "./logger.js";
 
 const DEFAULT_OPENAI_URL = "https://api.openai.com/v1/chat/completions";
@@ -12,6 +13,25 @@ const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 
 const LEAD_MARKER = "hydra:lead";
 const TEAMMATE_MARKER = "the user interacts primarily with the team lead";
+
+function isReasoningFieldValidationError(status: number, body: string): boolean {
+  if (status !== 400) return false;
+  const normalized = body.toLowerCase();
+  const hasReasoningField =
+    normalized.includes("reasoning_effort")
+    || normalized.includes("reasoning.effort")
+    || normalized.includes("\"reasoning\"")
+    || normalized.includes(" reasoning ");
+
+  const hasValidationSignal =
+    normalized.includes("invalid")
+    || normalized.includes("unknown")
+    || normalized.includes("unsupported")
+    || normalized.includes("not allowed")
+    || normalized.includes("unrecognized");
+
+  return hasReasoningField && hasValidationSignal;
+}
 
 function shouldPassthrough(
   model: string,
@@ -95,6 +115,7 @@ export function createProxyServer(config: ProxyConfig): http.Server {
     port: config.port,
     provider: config.targetProvider,
     passthrough: config.passthroughModels,
+    reasoningEffortOverride: config.reasoningEffortOverride,
   });
 
   return http.createServer(async (req, res) => {
@@ -139,7 +160,7 @@ export function createProxyServer(config: ProxyConfig): http.Server {
 
     try {
       const body = await readBody(req);
-      const anthropicReq = JSON.parse(body);
+      const anthropicReq = JSON.parse(body) as AnthropicRequest;
 
       // Extract system text for routing decisions
       let systemText = "";
@@ -149,11 +170,16 @@ export function createProxyServer(config: ProxyConfig): http.Server {
         systemText = anthropicReq.system.map((b: { text?: string }) => b.text || "").join(" ");
       }
 
-      const msgText = (anthropicReq.messages || []).slice(0, 3).map((m: { content?: string | Array<{ text?: string }> }) => {
-        if (typeof m.content === "string") return m.content;
-        if (Array.isArray(m.content)) return m.content.map((b: { text?: string }) => b.text || "").join(" ");
-        return "";
-      }).join(" ");
+      const msgText = anthropicReq.messages
+        .slice(0, 3)
+        .map((message) => {
+          if (typeof message.content === "string") return message.content;
+          if (!Array.isArray(message.content)) return "";
+          return message.content
+            .map((block) => (block.type === "text" ? block.text : ""))
+            .join(" ");
+        })
+        .join(" ");
 
       const fullText = systemText + " " + msgText;
       const hasMarker = fullText.includes(LEAD_MARKER);
@@ -161,6 +187,10 @@ export function createProxyServer(config: ProxyConfig): http.Server {
       const isStreaming = anthropicReq.stream !== false;
       const msgCount = anthropicReq.messages?.length || 0;
       const toolCount = anthropicReq.tools?.length || 0;
+      const resolvedReasoningEffort = resolveReasoningEffort({
+        cliOverride: config.reasoningEffortOverride,
+        requestEffort: anthropicReq.output_config?.effort,
+      });
 
       // Routing: teammates always translate, lead passthrough if configured
       const isPassthrough = !isTeammate && shouldPassthrough(anthropicReq.model, config.passthroughModels, fullText);
@@ -179,6 +209,8 @@ export function createProxyServer(config: ProxyConfig): http.Server {
         systemLength: systemText.length,
         route: isPassthrough ? "passthrough" : "translate",
         targetModel: isPassthrough ? undefined : config.targetModel,
+        reasoningEffort: resolvedReasoningEffort.effort,
+        reasoningSource: resolvedReasoningEffort.source,
       });
 
       // ─── Passthrough to real Anthropic ───
@@ -190,10 +222,15 @@ export function createProxyServer(config: ProxyConfig): http.Server {
 
       if (config.targetProvider === "chatgpt") {
         // ─── ChatGPT Backend (Responses API) ───
-        const responsesReq = translateRequestToResponses(anthropicReq, config.targetModel);
+        const responsesReq = translateRequestToResponses(
+          anthropicReq,
+          config.targetModel,
+          resolvedReasoningEffort.effort
+        );
 
         const MAX_RETRIES = 5;
         let upstream: Response | null = null;
+        let retriedWithoutReasoning = false;
         for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
           upstream = await fetch(CHATGPT_API_URL, {
             method: "POST",
@@ -205,6 +242,16 @@ export function createProxyServer(config: ProxyConfig): http.Server {
             },
             body: JSON.stringify(responsesReq),
           });
+
+          if (!retriedWithoutReasoning && responsesReq.reasoning && upstream.status === 400) {
+            const errText = await upstream.clone().text();
+            if (isReasoningFieldValidationError(upstream.status, errText)) {
+              delete responsesReq.reasoning;
+              retriedWithoutReasoning = true;
+              logger.logFile(session, "Reasoning effort field rejected by provider; retrying without reasoning.");
+              continue;
+            }
+          }
 
           if (upstream.status !== 429) break;
           if (attempt < MAX_RETRIES) {
@@ -236,7 +283,11 @@ export function createProxyServer(config: ProxyConfig): http.Server {
       } else {
         // ─── OpenAI Chat Completions ───
         const openaiUrl = config.targetUrl || DEFAULT_OPENAI_URL;
-        const openaiReq = translateRequest(anthropicReq, config.targetModel);
+        const openaiReq = translateRequest(
+          anthropicReq,
+          config.targetModel,
+          resolvedReasoningEffort.effort
+        );
 
         if (!isStreaming) {
           openaiReq.stream = false;
@@ -245,6 +296,7 @@ export function createProxyServer(config: ProxyConfig): http.Server {
 
         const MAX_RETRIES = 5;
         let upstream: Response | null = null;
+        let retriedWithoutReasoning = false;
         for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
           const headers: Record<string, string> = { "Content-Type": "application/json" };
           if (config.openaiApiKey) headers["Authorization"] = `Bearer ${config.openaiApiKey}`;
@@ -253,6 +305,16 @@ export function createProxyServer(config: ProxyConfig): http.Server {
             headers,
             body: JSON.stringify(openaiReq),
           });
+
+          if (!retriedWithoutReasoning && openaiReq.reasoning_effort && upstream.status === 400) {
+            const errText = await upstream.clone().text();
+            if (isReasoningFieldValidationError(upstream.status, errText)) {
+              delete openaiReq.reasoning_effort;
+              retriedWithoutReasoning = true;
+              logger.logFile(session, "Reasoning effort field rejected by provider; retrying without reasoning.");
+              continue;
+            }
+          }
 
           if (upstream.status !== 429) break;
           if (attempt < MAX_RETRIES) {

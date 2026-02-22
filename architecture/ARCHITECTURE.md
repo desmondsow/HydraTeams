@@ -120,6 +120,7 @@ The `ANTHROPIC_BASE_URL` environment variable is the hook. Confirmed working —
 | `max_tokens: 16384` | `max_tokens: 16384` |
 | `stream: true` | `stream: true, stream_options: { include_usage: true }` |
 | `temperature: 1.0` | `temperature: 1.0` |
+| `output_config.effort: "low|medium|high|max"` | `reasoning_effort: "low|medium|high|xhigh"` |
 
 ### Tool Definition Translation
 
@@ -482,9 +483,10 @@ async function translateStream(
 ```typescript
 export function translateRequest(
   anthropicReq: AnthropicMessagesRequest,
-  targetModel: string
+  targetModel: string,
+  reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh"
 ): OpenAIChatCompletionsRequest {
-  return {
+  const req: OpenAIChatCompletionsRequest = {
     model: targetModel,
     messages: translateMessages(anthropicReq.system, anthropicReq.messages),
     tools: anthropicReq.tools?.map(translateToolDef),
@@ -494,6 +496,12 @@ export function translateRequest(
     stream: true,
     stream_options: { include_usage: true },
   };
+
+  if (reasoningEffort && (targetModel.startsWith("gpt-5") || /^o\d/.test(targetModel))) {
+    req.reasoning_effort = reasoningEffort;
+  }
+
+  return req;
 }
 
 function translateToolDef(tool: AnthropicTool): OpenAITool {
@@ -608,6 +616,7 @@ function translateAssistantMessage(msg: AnthropicMessage): OpenAIMessage {
 ```typescript
 import http from "node:http";
 import { translateRequest } from "./translators/request";
+import { resolveReasoningEffort } from "./translators/effort";
 import { translateStream } from "./translators/response";
 import { loadConfig } from "./config";
 
@@ -624,8 +633,17 @@ const server = http.createServer(async (req, res) => {
       return proxyPassthrough(anthropicReq, req.headers, res);
     }
 
+    const resolvedEffort = resolveReasoningEffort({
+      cliOverride: config.reasoningEffortOverride,
+      requestEffort: anthropicReq.output_config?.effort,
+    });
+
     // Translate Anthropic → OpenAI
-    const openaiReq = translateRequest(anthropicReq, config.targetModel);
+    const openaiReq = translateRequest(
+      anthropicReq,
+      config.targetModel,
+      resolvedEffort.effort
+    );
 
     // Call OpenAI
     const upstream = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -674,10 +692,11 @@ server.listen(config.port, () => {
 interface ProxyConfig {
   port: number;              // Default: 3456
   targetModel: string;       // e.g., "gpt-5.3-codex"
-  targetProvider: string;    // "openai" | "google" | "ollama"
-  openaiApiKey: string;      // From env or ~/.hydramcp/.env
+  targetProvider: string;    // "openai" | "chatgpt"
+  openaiApiKey: string;      // From env or ~/.codex/auth.json fallback
   spoofModel: string;        // Model name reported to Claude Code (e.g., "claude-sonnet-4-5-20250929")
-  passthrough: boolean;      // If true, Claude model requests go to real Anthropic API
+  passthroughModels: string[]; // "lead", "*", or explicit model list
+  reasoningEffortOverride?: "minimal" | "low" | "medium" | "high" | "xhigh";
   anthropicApiKey?: string;  // Needed if passthrough is enabled
 }
 ```
@@ -693,14 +712,28 @@ HYDRA_PASSTHROUGH=true
 ANTHROPIC_API_KEY=sk-ant-...  # Only needed with passthrough
 ```
 
+**CLI-only override:**
+```bash
+--reasoning-effort minimal|low|medium|high|xhigh
+```
+
 ---
 
 ## 7. Edge Cases & Challenges
 
 ### Extended Thinking
-Claude supports `thinking` content blocks. OpenAI doesn't have an equivalent. The proxy should:
-- Strip `thinking` from the request if present (or map to reasoning_effort if supported)
-- Never generate `thinking` blocks in responses (GPT doesn't produce them)
+Claude may send effort controls in `output_config.effort`. HydraTeams resolves GPT effort per request:
+1. `--reasoning-effort` (if set)
+2. incoming request `output_config.effort`
+3. fallback `xhigh`
+
+Mapping:
+- `low -> low`
+- `medium -> medium`
+- `high -> high`
+- `max -> xhigh`
+
+If upstream rejects `reasoning`/`reasoning_effort` with a 400 validation error, HydraTeams retries once without the effort field.
 
 ### Model Name Spoofing
 Claude Code validates model names in some code paths. The proxy must report a valid Claude model name in `message_start`. Using `claude-sonnet-4-5-20250929` as default since teammates typically run Sonnet.
@@ -742,6 +775,7 @@ hydra-proxy/
 │   ├── config.ts              ~40 lines   Configuration loading
 │   └── translators/
 │       ├── types.ts           ~60 lines   TypeScript interfaces for both APIs
+│       ├── effort.ts          ~80 lines   Request-derived effort resolver
 │       ├── request.ts         ~120 lines  Anthropic request → OpenAI request
 │       ├── response.ts        ~150 lines  OpenAI SSE stream → Anthropic SSE stream
 │       └── messages.ts        ~100 lines  Message history translation

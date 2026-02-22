@@ -264,6 +264,7 @@ src/
 ├── config.ts                   93 lines   CLI args, env vars, codex auth
 └── translators/
     ├── types.ts               192 lines   TypeScript interfaces (both APIs)
+    ├── effort.ts               80 lines   Request-derived reasoning effort resolver
     ├── request.ts              93 lines   Anthropic → OpenAI Chat Completions
     ├── messages.ts            117 lines   Message history translation
     ├── response.ts            231 lines   OpenAI SSE → Anthropic SSE
@@ -286,6 +287,8 @@ Features:
 - Token count estimation for `/v1/messages/count_tokens`
 - Non-streaming response handling (haiku warmup requests)
 - Retry with exponential backoff on 429 rate limits
+- Request-derived reasoning effort mapping (`output_config.effort` → GPT effort)
+- Optional CLI override (`--reasoning-effort`) with precedence over request payload
 - Query parameter stripping for route matching
 
 ## What This Proves
@@ -312,6 +315,7 @@ Features:
 - Mixed team routing (lead passthrough + teammate translation): **Working**
 - Subscription-based auth (zero API cost): **Working**
 - Full agentic tool loops (Read, Write, Glob, Bash): **Verified**
+- Request-derived reasoning effort translation with fallback retry: **Working**
 
 ---
 

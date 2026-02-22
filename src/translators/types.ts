@@ -1,5 +1,12 @@
 // ─── Anthropic Messages API Types ─────────────────────────────
 
+export type GptReasoningEffort =
+  | "minimal"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh";
+
 export interface AnthropicRequest {
   model: string;
   system?: string | AnthropicSystemBlock[];
@@ -10,6 +17,9 @@ export interface AnthropicRequest {
   temperature?: number;
   stream?: boolean;
   metadata?: Record<string, unknown>;
+  output_config?: {
+    effort?: string;
+  };
 }
 
 export interface AnthropicSystemBlock {
@@ -70,6 +80,7 @@ export interface OpenAIRequest {
   temperature?: number;
   stream?: boolean;
   stream_options?: { include_usage: boolean };
+  reasoning_effort?: GptReasoningEffort;
 }
 
 export type OpenAIMessage =
@@ -172,6 +183,7 @@ export interface ProxyConfig {
   anthropicApiKey?: string;
   chatgptAccessToken?: string;
   chatgptAccountId?: string;
+  reasoningEffortOverride?: GptReasoningEffort;
 }
 
 // ─── Stream Translation State ────────────────────────────────

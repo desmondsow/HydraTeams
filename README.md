@@ -88,6 +88,9 @@ codex --login
 
 # Start the proxy
 node dist/index.js --model gpt-5.3-codex --provider chatgpt --port 3456 --passthrough lead
+
+# Optional: force effort regardless of incoming request payload
+node dist/index.js --model gpt-5.3-codex --provider chatgpt --port 3456 --passthrough lead --reasoning-effort xhigh
 ```
 
 ### Option B: OpenAI API Key
@@ -127,6 +130,28 @@ No API keys needed for the lead — the proxy relays your Claude subscription au
 | `--port` | `HYDRA_PROXY_PORT` | `3456` | Proxy listen port |
 | `--spoof` | `HYDRA_SPOOF_MODEL` | `claude-sonnet-4-5-20250929` | Model name reported to Claude Code |
 | `--passthrough` | `HYDRA_PASSTHROUGH` | (none) | Passthrough mode: `lead`, `*`, or comma-separated model names |
+| `--reasoning-effort` | (none) | (none) | Override GPT reasoning effort: `minimal`, `low`, `medium`, `high`, `xhigh` |
+
+## Reasoning Effort Mapping
+
+HydraTeams derives reasoning effort from each incoming Anthropic request payload, not from local proxy env vars.
+
+Precedence:
+1. `--reasoning-effort` (if provided)
+2. Request payload `output_config.effort`
+3. Default fallback `xhigh`
+
+Request mapping:
+- `output_config.effort=low` → GPT `low`
+- `output_config.effort=medium` → GPT `medium`
+- `output_config.effort=high` → GPT `high`
+- `output_config.effort=max` → GPT `xhigh`
+
+Provider behavior:
+- `--provider chatgpt`: sends `reasoning.effort`
+- `--provider openai`: sends `reasoning_effort` for reasoning-capable models (`gpt-5*`, `o*`)
+
+If an upstream endpoint rejects the reasoning field with a 400 validation error, HydraTeams retries once without that field.
 
 ## Supported Providers
 
@@ -151,6 +176,7 @@ Available models: `gpt-4o`, `gpt-4o-mini`, `o3-mini`, etc.
 - **Subscription auth relay** — No API keys needed for lead passthrough
 - **Full agentic tool loops** — Read, Write, Glob, Bash all verified working through proxy
 - **Retry with backoff** — Handles 429 rate limits gracefully (5 retries, exponential backoff)
+- **Request-derived effort mapping** — Reads Claude `output_config.effort`, maps to GPT reasoning effort, with optional CLI override
 - **Non-streaming support** — Handles Claude Code's haiku warmup requests
 - **Token count estimation** — Handles `/v1/messages/count_tokens` endpoint
 
@@ -163,6 +189,7 @@ src/
 ├── config.ts                   CLI args, env vars, codex JWT auth
 └── translators/
     ├── types.ts                TypeScript interfaces (Anthropic + OpenAI)
+    ├── effort.ts               Request-derived effort resolution + mapping
     ├── request.ts              Anthropic → OpenAI Chat Completions
     ├── messages.ts             Message history translation
     ├── response.ts             OpenAI Chat Completions SSE → Anthropic SSE

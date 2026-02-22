@@ -24,7 +24,7 @@ Large language models are rapidly improving and becoming interchangeable commodi
 
 Different tasks within a coding workflow have vastly different complexity and cost profiles. Using a $15/M token frontier model to search files for TODO comments is economically irrational. Using a $0.07/M token model for architectural decisions is technically reckless.
 
-**Implication:** The proxy enables routing different teammates to different models. Research tasks go through a Gemini Flash proxy, code generation through a Codex proxy, reviews through a different model entirely. Cost optimization happens at the teammate level.
+**Implication:** The proxy enables routing different teammates to different models. Research tasks go through a Gemini Flash proxy, code generation through a Codex proxy, reviews through a different model entirely. Cost optimization happens at the teammate level, and request-level reasoning effort controls are preserved during translation.
 
 ---
 

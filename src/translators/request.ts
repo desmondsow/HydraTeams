@@ -1,5 +1,6 @@
 import type {
   AnthropicRequest,
+  GptReasoningEffort,
   AnthropicTool,
   AnthropicToolChoice,
   OpenAIRequest,
@@ -13,7 +14,8 @@ import { translateMessages } from "./messages.js";
  */
 export function translateRequest(
   req: AnthropicRequest,
-  targetModel: string
+  targetModel: string,
+  reasoningEffort?: GptReasoningEffort
 ): OpenAIRequest {
   // Clamp max_tokens — Claude allows 32k+ but GPT-4o caps at 16384
   const MAX_OUTPUT_TOKENS: Record<string, number> = {
@@ -45,7 +47,16 @@ export function translateRequest(
     result.tool_choice = toolChoice;
   }
 
+  if (reasoningEffort && isReasoningCapableModel(targetModel)) {
+    result.reasoning_effort = reasoningEffort;
+  }
+
   return result;
+}
+
+function isReasoningCapableModel(model: string): boolean {
+  const normalized = model.toLowerCase();
+  return normalized.startsWith("gpt-5") || /^o\d/.test(normalized);
 }
 
 /**

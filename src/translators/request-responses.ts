@@ -1,5 +1,6 @@
 import type {
   AnthropicRequest,
+  GptReasoningEffort,
   AnthropicMessage,
   AnthropicContentBlock,
   AnthropicTextBlock,
@@ -20,6 +21,7 @@ export interface ResponsesAPIRequest {
   tool_choice?: string | { type: "function"; name: string };
   store: boolean;
   stream: boolean;
+  reasoning?: { effort: GptReasoningEffort };
 }
 
 export type ResponsesAPIInputItem =
@@ -58,7 +60,8 @@ export interface ResponsesAPITool {
 
 export function translateRequestToResponses(
   req: AnthropicRequest,
-  targetModel: string
+  targetModel: string,
+  reasoningEffort?: GptReasoningEffort
 ): ResponsesAPIRequest {
   const instructions = extractSystemPrompt(req.system);
   const input = translateMessages(req.messages);
@@ -67,7 +70,7 @@ export function translateRequestToResponses(
     ? translateToolChoice(req.tool_choice)
     : "auto";
 
-  return {
+  const result: ResponsesAPIRequest = {
     model: targetModel,
     instructions,
     input,
@@ -76,6 +79,12 @@ export function translateRequestToResponses(
     store: false,
     stream: true,
   };
+
+  if (reasoningEffort) {
+    result.reasoning = { effort: reasoningEffort };
+  }
+
+  return result;
 }
 
 // ─── System Prompt Extraction ────────────────────────────────────

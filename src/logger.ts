@@ -36,6 +36,8 @@ export interface RequestInfo {
   systemLength: number;
   route: "passthrough" | "translate" | "count_tokens";
   targetModel?: string;
+  reasoningEffort?: string;
+  reasoningSource?: "cli" | "request" | "default";
 }
 
 export class ProxyLogger {
@@ -122,7 +124,7 @@ export class ProxyLogger {
       `${session.color}[${this.pad(session.label, 10)}]${C.reset} ` +
       `${C.dim}${ts}${C.reset} ` +
       `→ ${route} ` +
-      `${C.dim}(${info.msgCount} msgs, ${info.toolCount} tools, #${num})${C.reset}`
+      `${C.dim}(${info.msgCount} msgs, ${info.toolCount} tools, effort=${info.reasoningEffort || "n/a"}, #${num})${C.reset}`
     );
 
     // File: detailed
@@ -130,6 +132,7 @@ export class ProxyLogger {
       `[${ts}] #${num} → ${route}\n` +
       `  model=${info.model} msgs=${info.msgCount} tools=${info.toolCount} ` +
       `stream=${info.isStreaming} marker=${info.hasMarker} teammate=${info.isTeammate}\n` +
+      `  effort=${info.reasoningEffort || "n/a"} source=${info.reasoningSource || "n/a"}\n` +
       `  system=${info.systemLength} chars\n\n`
     );
 
@@ -155,12 +158,14 @@ export class ProxyLogger {
     port: number;
     provider: string;
     passthrough: string[];
+    reasoningEffortOverride?: string;
   }): void {
     console.log(`\n${C.bold}HydraTeams Proxy${C.reset}`);
     console.log(`${C.dim}${"─".repeat(40)}${C.reset}`);
     console.log(`  Port:        ${C.cyan}:${config.port}${C.reset}`);
     console.log(`  Target:      ${C.yellow}${config.targetModel}${C.reset} (${config.provider})`);
     console.log(`  Spoof:       ${config.spoofModel}`);
+    console.log(`  Effort CLI:  ${config.reasoningEffortOverride || "none"}`);
     console.log(`  Passthrough: ${config.passthrough.join(", ") || "none"}`);
     console.log(`  Logs:        ${this.logDir}/`);
     console.log(`${C.dim}${"─".repeat(40)}${C.reset}\n`);
