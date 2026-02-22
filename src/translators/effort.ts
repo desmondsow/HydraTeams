@@ -98,7 +98,7 @@ export function resolveReasoningEffort(
   }
 
   return {
-    effort: "xhigh",
+    effort: "high",
     source: "default",
   };
 }

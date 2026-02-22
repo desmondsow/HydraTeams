@@ -709,10 +709,11 @@ HYDRA_TARGET_PROVIDER=openai
 OPENAI_API_KEY=sk-...
 HYDRA_SPOOF_MODEL=claude-sonnet-4-5-20250929
 HYDRA_PASSTHROUGH=true
+HYDRA_REASONING_EFFORT=high
 ANTHROPIC_API_KEY=sk-ant-...  # Only needed with passthrough
 ```
 
-**CLI-only override:**
+**CLI/env override:**
 ```bash
 --reasoning-effort minimal|low|medium|high|xhigh
 ```
@@ -724,8 +725,9 @@ ANTHROPIC_API_KEY=sk-ant-...  # Only needed with passthrough
 ### Extended Thinking
 Claude may send effort controls in `output_config.effort`. HydraTeams resolves GPT effort per request:
 1. `--reasoning-effort` (if set)
-2. incoming request `output_config.effort`
-3. fallback `xhigh`
+2. `HYDRA_REASONING_EFFORT` (if set)
+3. incoming request `output_config.effort`
+4. fallback `high`
 
 Mapping:
 - `low -> low`

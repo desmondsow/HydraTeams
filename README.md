@@ -130,16 +130,17 @@ No API keys needed for the lead — the proxy relays your Claude subscription au
 | `--port` | `HYDRA_PROXY_PORT` | `3456` | Proxy listen port |
 | `--spoof` | `HYDRA_SPOOF_MODEL` | `claude-sonnet-4-5-20250929` | Model name reported to Claude Code |
 | `--passthrough` | `HYDRA_PASSTHROUGH` | (none) | Passthrough mode: `lead`, `*`, or comma-separated model names |
-| `--reasoning-effort` | (none) | (none) | Override GPT reasoning effort: `minimal`, `low`, `medium`, `high`, `xhigh` |
+| `--reasoning-effort` | `HYDRA_REASONING_EFFORT` | `high` | Override GPT reasoning effort: `minimal`, `low`, `medium`, `high`, `xhigh` |
 
 ## Reasoning Effort Mapping
 
-HydraTeams derives reasoning effort from each incoming Anthropic request payload, not from local proxy env vars.
+HydraTeams resolves reasoning effort from CLI/env override first, then request payload.
 
 Precedence:
 1. `--reasoning-effort` (if provided)
-2. Request payload `output_config.effort`
-3. Default fallback `xhigh`
+2. `HYDRA_REASONING_EFFORT` (if set)
+3. Request payload `output_config.effort`
+4. Default fallback `high`
 
 Request mapping:
 - `output_config.effort=low` → GPT `low`

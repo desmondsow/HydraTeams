@@ -41,7 +41,9 @@ export function loadConfig(args: string[]): ProxyConfig {
   const spoofModel = getArg("--spoof") || process.env.HYDRA_SPOOF_MODEL || "claude-sonnet-4-5-20250929";
   const targetUrl = getArg("--target-url") || process.env.HYDRA_TARGET_URL;
   const reasoningEffortArg = getArg("--reasoning-effort");
-  const reasoningEffortOverride = parseGptReasoningEffort(reasoningEffortArg);
+  const reasoningEffortEnv = process.env.HYDRA_REASONING_EFFORT;
+  const reasoningEffortValue = reasoningEffortArg ?? reasoningEffortEnv;
+  const reasoningEffortOverride = parseGptReasoningEffort(reasoningEffortValue);
 
   // Passthrough config
   const passthroughArg = getArg("--passthrough");
@@ -88,8 +90,14 @@ export function loadConfig(args: string[]): ProxyConfig {
     process.exit(1);
   }
 
-  if (reasoningEffortArg && !reasoningEffortOverride) {
+  if (reasoningEffortArg && !parseGptReasoningEffort(reasoningEffortArg)) {
     console.error(`Error: Invalid --reasoning-effort value "${reasoningEffortArg}"`);
+    console.error("  Allowed values: minimal, low, medium, high, xhigh");
+    process.exit(1);
+  }
+
+  if (!reasoningEffortArg && reasoningEffortEnv && !parseGptReasoningEffort(reasoningEffortEnv)) {
+    console.error(`Error: Invalid HYDRA_REASONING_EFFORT value "${reasoningEffortEnv}"`);
     console.error("  Allowed values: minimal, low, medium, high, xhigh");
     process.exit(1);
   }

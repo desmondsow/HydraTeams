@@ -165,7 +165,7 @@ export class ProxyLogger {
     console.log(`  Port:        ${C.cyan}:${config.port}${C.reset}`);
     console.log(`  Target:      ${C.yellow}${config.targetModel}${C.reset} (${config.provider})`);
     console.log(`  Spoof:       ${config.spoofModel}`);
-    console.log(`  Effort CLI:  ${config.reasoningEffortOverride || "none"}`);
+    console.log(`  Effort Ovr:  ${config.reasoningEffortOverride || "none"}`);
     console.log(`  Passthrough: ${config.passthrough.join(", ") || "none"}`);
     console.log(`  Logs:        ${this.logDir}/`);
     console.log(`${C.dim}${"─".repeat(40)}${C.reset}\n`);
